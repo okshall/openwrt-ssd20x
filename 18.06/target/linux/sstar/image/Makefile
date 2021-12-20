@@ -31,6 +31,14 @@ define Image/Build/squashfs
 	dd if=$(KDIR)/root.$(1) of=$(BIN_DIR)/wt-$(BOARD)-$(1).img bs=64k conv=sync
 endef
 
+define Image/Build/kysquashfs
+	mkdir -p $(BIN_DIR)/$(1)
+	$(KDIR)/linux-$(LINUX_VERSION)/merge.sh "$(BIN_DIR)/wt-$(BOARD)-uImage.xz@0 $(BIN_DIR)/wt-$(BOARD)-squashfs.img@2686976" "$(BIN_DIR)/$(1)/$(1)-sysupgrade.bin"
+	$(KDIR)/linux-$(LINUX_VERSION)/merge.sh "$(BIN_DIR)/boot.bin@0 $(BIN_DIR)/$(1)/$(1)-sysupgrade.bin@458752" "$(BIN_DIR)/$(1)/$(1)-all.bin"
+	cp $(BIN_DIR)/wt-$(BOARD)-uImage.xz $(BIN_DIR)/$(1)/$(1)-uImage.bin
+	cp $(BIN_DIR)/wt-$(BOARD)-squashfs.img $(BIN_DIR)/$(1)/$(1)-rootfs.bin
+	cp $(BIN_DIR)/boot.bin $(BIN_DIR)/$(1)/$(1)-boot.bin
+endef
 # $(1): ubinize ini file
 # $(2): working directory
 # $(3): output file
@@ -83,8 +91,8 @@ define Image/Build/Profile/WT2022
 	$(call Image/Build/WTNAND,WT2022)
 endef
 
-define Image/Build/Profile/WT2020
-	$(call Image/Build/WTNAND,WT2020)
+define Image/Build/Profile/WTNOR
+	$(call Image/Build/kysquashfs,WTNOR)
 endef
 
 define Image/Build/Profile
