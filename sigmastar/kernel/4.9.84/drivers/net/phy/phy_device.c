@@ -40,6 +40,9 @@
 MODULE_DESCRIPTION("PHY library");
 MODULE_AUTHOR("Andy Fleming");
 MODULE_LICENSE("GPL");
+u32 link_phy_id = 0;
+#define PHY1 (0x00000128)
+#define RTL8309M (0x001cca52)
 
 void phy_device_free(struct phy_device *phydev)
 {
@@ -521,8 +524,8 @@ struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 {
 	struct phy_c45_device_ids c45_ids = {0};
 	u32 phy_id = 0;
+	struct phy_device *dev = NULL;
 	int r;
-
 	r = get_phy_id(bus, addr, &phy_id, is_c45, &c45_ids);
 	if (r)
 		return ERR_PTR(r);
@@ -531,7 +534,10 @@ struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 	if ((phy_id & 0x1fffffff) == 0x1fffffff)
 		return ERR_PTR(-ENODEV);
 
-	return phy_device_create(bus, addr, phy_id, is_c45, &c45_ids);
+	dev = phy_device_create(bus, addr, phy_id, is_c45, &c45_ids);
+	if (phy_id != 0x0) 
+		link_phy_id = phy_id;
+	return dev;
 }
 EXPORT_SYMBOL(get_phy_device);
 
@@ -1308,7 +1314,22 @@ static int gen10g_config_aneg(struct phy_device *phydev)
 int genphy_update_link(struct phy_device *phydev)
 {
 	int status;
-
+	int i;
+	
+	if (link_phy_id == RTL8309M){
+		for (i = 0; i < 8; i++){
+		   phydev->mdio.addr = i;
+		   status = phy_read(phydev, MII_BMSR);
+		   if (status < 0)
+		      return status;
+		   if ((status & BMSR_LSTATUS) == 0){
+		      phydev->link = 0;
+		   }else{
+		      phydev->link = 1;
+		      return 0;
+		   }
+		}
+	}else{
 	/* Do a fake read */
 	status = phy_read(phydev, MII_BMSR);
 	if (status < 0)
@@ -1323,7 +1344,7 @@ int genphy_update_link(struct phy_device *phydev)
 		phydev->link = 0;
 	else
 		phydev->link = 1;
-
+	}
 	return 0;
 }
 EXPORT_SYMBOL(genphy_update_link);

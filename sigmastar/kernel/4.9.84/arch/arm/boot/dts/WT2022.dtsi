@@ -341,7 +341,7 @@
             clocks = <&CLK_utmi>;
             interrupts = <GIC_SPI INT_IRQ_UHC_P2 IRQ_TYPE_LEVEL_HIGH>;
             dpdm_swap=<0>;
-            //power-enable-pad = <PAD_UART0_RX>;
+            power-enable-pad = <PAD_UART0_RX>;
             status = "ok";
         };
 
@@ -373,7 +373,7 @@
             micin-pregain-level=<0>;    //0~3
             micin-gain-level=<3>;    //0~7
             linein-gain-level=<2>;  //0~7
-            //amp-gpio = <PAD_GPIO14 1>;
+            amp-gpio = <PAD_GPIO12 1>;
             clocks = <&CLK_upll_384m>;
            // playback-dma-buffer=<98304>; //512(ms)*48(kHz)*2(ch)*2(16bits)
            // capture-dma-buffer=<122880>; //640(ms)*48(kHz)*2(ch)*2(16bits)

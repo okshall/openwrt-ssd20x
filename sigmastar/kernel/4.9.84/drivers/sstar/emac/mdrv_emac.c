@@ -1096,8 +1096,6 @@ void MDev_EMAC_update_mac_address (struct net_device *dev)
     MHal_EMAC_Write_SA1H(hemac->hal, value);
 }
 
-extern void wt_get_mac(void *mac);
-
 //-------------------------------------------------------------------------------------------------
 // ADDRESS MANAGEMENT
 //-------------------------------------------------------------------------------------------------
@@ -1107,7 +1105,6 @@ extern void wt_get_mac(void *mac);
 //-------------------------------------------------------------------------------------------------
 static void MDev_EMAC_get_mac_address (struct net_device *dev)
 {
-#if 0
     struct emac_handle *hemac = (struct emac_handle*) netdev_priv(dev);
     char addr[6];
     u32 HiAddr, LoAddr;
@@ -1143,15 +1140,6 @@ static void MDev_EMAC_get_mac_address (struct net_device *dev)
         memcpy (dev->dev_addr, &addr, 6);
         return;
     }
-#endif
-    char addr[6] = {0};
-
-    wt_get_mac(addr);
-
-    if (is_valid_ether_addr(addr)) {
-        memcpy(dev->dev_addr, &addr, 6);
-        return;
-    }  
 }
 
 #ifdef URANUS_ETHER_ADDR_CONFIGURABLE
@@ -1920,7 +1908,8 @@ static int MDev_EMAC_tx(struct sk_buff *skb, struct net_device *dev)
         // dma_unmap_single(NULL, VIRT2PA(start), EMAC_MTU, DMA_TO_DEVICE);
         if (nr_frags)
         {
-            char* start = kmalloc(EMAC_MTU, GFP_ATOMIC);
+            //char* start = kmalloc(EMAC_MTU, GFP_ATOMIC);
+            char* start = kmalloc(ALIGN(EMAC_MTU,256), GFP_ATOMIC);
             char* p = start;
 
             if (!start)
@@ -3117,8 +3106,6 @@ static void MDev_EMAC_netpoll(struct net_device *dev)
 }
 #endif
 
-extern void phy_hotplug_event(const char *ifname, const u32 status);
-
 #if KERNEL_PHY
 static void emac_phy_link_adjust(struct net_device *dev)
 {
@@ -3171,8 +3158,6 @@ static void emac_phy_link_adjust(struct net_device *dev)
         // spin_unlock_irqrestore(&hemac->mutexTXQ, flags);
     }
     spin_unlock_irqrestore(&hemac->mutexNetIf, flag1);
-
-    phy_hotplug_event(dev->name, dev->phydev->link);
 
 #if 0
     printk("[%s][%d] adjust phy (link, speed, duplex) = (%d, %d, %d, %d)\n", __FUNCTION__, __LINE__,
