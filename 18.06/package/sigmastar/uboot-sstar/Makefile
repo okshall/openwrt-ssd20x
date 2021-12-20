@@ -68,7 +68,8 @@ define Package/uboot-sstar
   $(call Package/uboot-sstar/common,$(1),$(2))
 
   define Package/uboot-sstar-$(1)/install
-	$(INSTALL_DATA) $(PKG_BUILD_DIR)/u-boot.xz.img.bin $(BIN_DIR)/$(UBOOT_IMAGE)
+	$(CP) noripl/* $(PKG_BUILD_DIR)
+	$(PKG_BUILD_DIR)/merge.sh "${PKG_BUILD_DIR}/IPL.bin@0 ${PKG_BUILD_DIR}/IPL_CUST.bin@65536 ${PKG_BUILD_DIR}/MXP_SF.bin@131072 $(PKG_BUILD_DIR)/u-boot.xz.img.bin@196608" "${BIN_DIR}/boot.bin"
   endef
 
   $$(eval $$(call BuildPackage,uboot-sstar-$(1)))
@@ -86,5 +87,4 @@ endef
 
 $(eval $(call Package/uboot-nand-sstar,WT2011))
 $(eval $(call Package/uboot-nand-sstar,WT2022))
-$(eval $(call Package/uboot-nand-sstar,WT2020))
-$(eval $(call Package/uboot-nand-sstar,WT2015))
+$(eval $(call Package/uboot-sstar,WTNOR))

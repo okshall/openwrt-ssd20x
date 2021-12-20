@@ -33,9 +33,13 @@
 # define CONFIG_ENV_SPI_MODE	SPI_MODE_3
 #endif
 
+#ifdef CONFIG_MS_SAVE_ENV_IN_ISP_FLASH
+int ms_nor_env_offset = 0;
+#endif
+
 #ifdef CONFIG_ENV_OFFSET_REDUND
-static ulong env_offset		= CONFIG_ENV_OFFSET;
-static ulong env_new_offset	= CONFIG_ENV_OFFSET_REDUND;
+static ulong env_offset;
+static ulong env_new_offset;
 
 #define ACTIVE_FLAG	1
 #define OBSOLETE_FLAG	0
@@ -46,6 +50,79 @@ DECLARE_GLOBAL_DATA_PTR;
 char *env_name_spec = "SPI Flash";
 
 static struct spi_flash *env_flash;
+
+#ifdef CONFIG_MS_PARTITION
+#include "drivers/mstar/partition/part_mxp.h"
+extern int mxp_init_nor_flash(void);
+
+int mxp_get_env(int* offset, int* size)
+{
+    char strENVName[] = "UBOOT_ENV";
+	int idx;
+    *offset = CONFIG_ENV_OFFSET;
+    *size = CONFIG_ENV_SIZE;
+    int ret=0;
+
+    if((ret=mxp_init_nor_flash())<0)
+    {
+        return -1;
+    }
+
+    mxp_load_table();
+    idx=mxp_get_record_index(strENVName);
+    if(idx>=0)
+    {
+        mxp_record rec;
+        if(0==mxp_get_record_by_index(idx,&rec))
+        {
+            *offset = rec.start;
+            *size = rec.size;
+        }
+        else
+        {
+            printf("failed to get MXP record with name: %s\n", strENVName);
+            return -1;
+        }
+
+
+    }
+    else
+    {
+        printf("can not found mxp record: %s\n", strENVName);
+        return -1;
+    }
+
+
+	printf("env_offset=0x%X env_size=0x%X\n", *offset, *size);
+
+	return 0;
+
+}
+#elif defined(CONFIG_MSTAR_ENV_OFFSET)
+static image_header_t *_get_image_header(void)
+{
+    return (image_header_t *)(MS_SPI_ADDR+MS_SPI_BOOT_ROM_SIZE);
+}
+
+int ms_get_spi_env_offset(void)
+{
+    int spi_env_offset= MS_SPI_UBOOT_SIZE+MS_SPI_BOOT_ROM_SIZE;
+
+    image_header_t *hdr=_get_image_header();
+    if(image_check_magic(hdr))
+    {
+        spi_env_offset=(((image_get_image_size(hdr) -1 ) / CONFIG_ENV_SECT_SIZE )+1)*CONFIG_ENV_SECT_SIZE + MS_SPI_BOOT_ROM_SIZE;
+    }
+    else
+    {
+        printf("Not a img type UBOOT!! Using default spi_env_offset !!\n");
+    }
+
+    printf("spi_env_offset=0x%08X\n",spi_env_offset);
+
+    return spi_env_offset;
+}
+#endif
 
 #if defined(CONFIG_ENV_OFFSET_REDUND)
 int saveenv(void)
@@ -69,6 +146,18 @@ int saveenv(void)
 	if (ret)
 		return ret;
 	env_new.flags	= ACTIVE_FLAG;
+
+#ifdef CONFIG_MS_PARTITION
+    int mxp_env_size = 0;
+    mxp_get_env(&CONFIG_ENV_OFFSET, &mxp_env_size);
+    if(mxp_env_size != CONFIG_ENV_SIZE * 2)
+    {
+        puts("mxp env size error\n");
+        return 1;
+    }
+#elif define(CONFIG_MSTAR_ENV_OFFSET)
+    CONFIG_ENV_OFFSET= ms_get_spi_env_offset();
+#endif
 
 	if (gd->env_valid == 1) {
 		env_new_offset = CONFIG_ENV_OFFSET_REDUND;
@@ -145,6 +234,18 @@ void env_relocate_spec(void)
 	env_t *tmp_env2 = NULL;
 	env_t *ep = NULL;
 
+#ifdef CONFIG_MS_PARTITION
+    int mxp_env_size = 0;
+    mxp_get_env(&CONFIG_ENV_OFFSET, &mxp_env_size);
+    if(mxp_env_size != CONFIG_ENV_SIZE * 2)
+    {
+        set_default_env("mxp env size error");
+        return;
+    }
+#elif define(CONFIG_MSTAR_ENV_OFFSET)
+    CONFIG_ENV_OFFSET= ms_get_spi_env_offset();
+#endif
+
 	tmp_env1 = (env_t *)malloc(CONFIG_ENV_SIZE);
 	tmp_env2 = (env_t *)malloc(CONFIG_ENV_SIZE);
 
@@ -220,64 +321,27 @@ out:
 	free(tmp_env1);
 	free(tmp_env2);
 }
-#elif defined(CONFIG_MS_PARTITION)
-#include "drivers/mstar/partition/part_mxp.h"
-extern int mxp_init_nor_flash(void);
 
-int mxp_get_env(int* offset, int* size)
-{
-    char strENVName[] = "UBOOT_ENV";
-	int idx;
-    *offset = CONFIG_ENV_OFFSET;
-    *size = CONFIG_ENV_SIZE;
-    int ret=0;
-
-    if((ret=mxp_init_nor_flash())<0)
-    {
-        return -1;
-    }
-
-    mxp_load_table();
-    idx=mxp_get_record_index(strENVName);
-    if(idx>=0)
-    {
-        mxp_record rec;
-        if(0==mxp_get_record_by_index(idx,&rec))
-        {
-            *offset = rec.start;
-            *size = rec.size;
-        }
-        else
-        {
-            printf("failed to get MXP record with name: %s\n", strENVName);
-            return -1;
-        }
-
-
-    }
-    else
-    {
-        printf("can not found mxp record: %s\n", strENVName);
-        return -1;
-    }
-
-
-	printf("env_offset=0x%X env_size=0x%X\n", *offset, *size);
-
-	return 0;
-
-}
+#else
 
 int saveenv(void)
 {
-	int	saved_size, saved_offset;
+	u32	saved_size, saved_offset, sector = 1;
 	char	*saved_buffer = NULL;
 	int	ret = 1;
 	env_t	env_new;
-	int mxp_env_offset, mxp_env_size;
 
-    mxp_get_env(&mxp_env_offset, &mxp_env_size);
-
+#ifdef CONFIG_MS_PARTITION
+    int mxp_env_size = 0;
+    mxp_get_env(&CONFIG_ENV_OFFSET, &mxp_env_size);
+    if(mxp_env_size != CONFIG_ENV_SIZE)
+    {
+        puts("mxp env size error\n");
+        return 1;
+    }
+#elif define(CONFIG_MSTAR_ENV_OFFSET)
+    CONFIG_ENV_OFFSET= ms_get_spi_env_offset();
+#endif
 
 	if (!env_flash) {
 		env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
@@ -290,9 +354,9 @@ int saveenv(void)
 	}
 
 	/* Is the sector larger than the env (i.e. embedded) */
-	if (CONFIG_ENV_SECT_SIZE > mxp_env_size) {
-		saved_size = CONFIG_ENV_SECT_SIZE - mxp_env_size;
-		saved_offset = mxp_env_offset + mxp_env_size;
+	if (CONFIG_ENV_SECT_SIZE > CONFIG_ENV_SIZE) {
+		saved_size = CONFIG_ENV_SECT_SIZE - CONFIG_ENV_SIZE;
+		saved_offset = CONFIG_ENV_OFFSET + CONFIG_ENV_SIZE;
 		saved_buffer = malloc(saved_size);
 		if (!saved_buffer)
 			goto done;
@@ -302,30 +366,30 @@ int saveenv(void)
 		if (ret)
 			goto done;
 	}
-    else
-    {
-		saved_size = CONFIG_ENV_SECT_SIZE - mxp_env_size;
-		saved_offset = mxp_env_offset + mxp_env_size;
-    }
 
+	if (CONFIG_ENV_SIZE > CONFIG_ENV_SECT_SIZE) {
+		sector = CONFIG_ENV_SIZE / CONFIG_ENV_SECT_SIZE;
+		if (CONFIG_ENV_SIZE % CONFIG_ENV_SECT_SIZE)
+			sector++;
+	}
 
 	ret = env_export(&env_new);
 	if (ret)
 		goto done;
 
 	puts("Erasing SPI flash...");
-	ret = spi_flash_erase(env_flash, mxp_env_offset,
-		mxp_env_size);
+	ret = spi_flash_erase(env_flash, CONFIG_ENV_OFFSET,
+		sector * CONFIG_ENV_SECT_SIZE);
 	if (ret)
 		goto done;
 
 	puts("Writing to SPI flash...");
-	ret = spi_flash_write(env_flash, mxp_env_offset,
-		mxp_env_size, &env_new);
+	ret = spi_flash_write(env_flash, CONFIG_ENV_OFFSET,
+		CONFIG_ENV_SIZE, &env_new);
 	if (ret)
 		goto done;
 
-	if (CONFIG_ENV_SECT_SIZE > mxp_env_size) {
+	if (CONFIG_ENV_SECT_SIZE > CONFIG_ENV_SIZE) {
 		ret = spi_flash_write(env_flash, saved_offset,
 			saved_size, saved_buffer);
 		if (ret)
@@ -347,11 +411,19 @@ void env_relocate_spec(void)
 	int ret;
 	char *buf = NULL;
 
-	int mxp_env_offset, mxp_env_size;
-    mxp_get_env(&mxp_env_offset, &mxp_env_size);
+#ifdef CONFIG_MS_PARTITION
+    int mxp_env_size = 0;
+    mxp_get_env(&CONFIG_ENV_OFFSET, &mxp_env_size);
+    if(mxp_env_size != CONFIG_ENV_SIZE)
+    {
+        set_default_env("mxp env size error");
+        return;
+    }
+#elif define(CONFIG_MSTAR_ENV_OFFSET)
+    CONFIG_ENV_OFFSET= ms_get_spi_env_offset();
+#endif
 
-
-	buf = (char *)malloc(mxp_env_size);
+	buf = (char *)malloc(CONFIG_ENV_SIZE);
 	env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS, CONFIG_ENV_SPI_CS,
 			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
 	if (!env_flash) {
@@ -362,7 +434,7 @@ void env_relocate_spec(void)
 	}
 
 	ret = spi_flash_read(env_flash,
-		mxp_env_offset, mxp_env_size, buf);
+		CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE, buf);
 	if (ret) {
 		set_default_env("!spi_flash_read() failed");
 		goto out;
@@ -377,244 +449,6 @@ void env_relocate_spec(void)
     }
 #endif
 
-	if (ret)
-		gd->env_valid = 1;
-out:
-	spi_flash_free(env_flash);
-	if (buf)
-		free(buf);
-	env_flash = NULL;
-}
-
-#elif defined(CONFIG_MSTAR_ENV_OFFSET)
-
-
-static image_header_t *_get_image_header(void)
-{
-	return (image_header_t *)(MS_SPI_ADDR+MS_SPI_BOOT_ROM_SIZE);
-}
-
-
-int ms_get_spi_env_offset(void)
-{
-	int spi_env_offset= MS_SPI_UBOOT_SIZE+MS_SPI_BOOT_ROM_SIZE;
-
-	image_header_t *hdr=_get_image_header();
-	if(image_check_magic(hdr))
-	{
-		spi_env_offset=(((image_get_image_size(hdr) -1 ) / CONFIG_ENV_SECT_SIZE )+1)*CONFIG_ENV_SECT_SIZE + MS_SPI_BOOT_ROM_SIZE;
-	}
-	else
-	{
-		printf("Not a img type UBOOT!! Using default spi_env_offset !!\n");
-	}
-
-	printf("spi_env_offset=0x%08X\n",spi_env_offset);
-
-	return spi_env_offset;
-
-}
-
-
-int saveenv(void)
-{
-	u32	saved_size, saved_offset, sector = 1;
-	char	*saved_buffer = NULL;
-	int	ret = 1;
-	env_t	env_new;
-	int CONFIG_ENV_OFFSET= ms_get_spi_env_offset();
-
-	if (!env_flash) {
-		env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
-			CONFIG_ENV_SPI_CS,
-			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
-		if (!env_flash) {
-			set_default_env("!spi_flash_probe() failed");
-			return 1;
-		}
-	}
-
-	/* Is the sector larger than the env (i.e. embedded) */
-	if (CONFIG_ENV_SECT_SIZE > CONFIG_ENV_SIZE) {
-		saved_size = CONFIG_ENV_SECT_SIZE - CONFIG_ENV_SIZE;
-		saved_offset = CONFIG_ENV_OFFSET + CONFIG_ENV_SIZE;
-		saved_buffer = malloc(saved_size);
-		if (!saved_buffer)
-			goto done;
-
-		ret = spi_flash_read(env_flash, saved_offset,
-			saved_size, saved_buffer);
-		if (ret)
-			goto done;
-	}
-
-	if (CONFIG_ENV_SIZE > CONFIG_ENV_SECT_SIZE) {
-		sector = CONFIG_ENV_SIZE / CONFIG_ENV_SECT_SIZE;
-		if (CONFIG_ENV_SIZE % CONFIG_ENV_SECT_SIZE)
-			sector++;
-	}
-
-	ret = env_export(&env_new);
-	if (ret)
-		goto done;
-
-	puts("Erasing SPI flash...");
-	ret = spi_flash_erase(env_flash, CONFIG_ENV_OFFSET,
-		sector * CONFIG_ENV_SECT_SIZE);
-	if (ret)
-		goto done;
-
-	puts("Writing to SPI flash...");
-	ret = spi_flash_write(env_flash, CONFIG_ENV_OFFSET,
-		CONFIG_ENV_SIZE, &env_new);
-	if (ret)
-		goto done;
-
-	if (CONFIG_ENV_SECT_SIZE > CONFIG_ENV_SIZE) {
-		ret = spi_flash_write(env_flash, saved_offset,
-			saved_size, saved_buffer);
-		if (ret)
-			goto done;
-	}
-
-	ret = 0;
-	puts("done\n");
-
- done:
-	if (saved_buffer)
-		free(saved_buffer);
-
-	return ret;
-}
-
-void env_relocate_spec(void)
-{
-	int ret;
-	char *buf = NULL;
-	int CONFIG_ENV_OFFSET= ms_get_spi_env_offset();
-
-	buf = (char *)malloc(CONFIG_ENV_SIZE);
-	env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS, CONFIG_ENV_SPI_CS,
-			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
-	if (!env_flash) {
-		set_default_env("!spi_flash_probe() failed");
-		if (buf)
-			free(buf);
-		return;
-	}
-
-	ret = spi_flash_read(env_flash,
-		CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE, buf);
-	if (ret) {
-		set_default_env("!spi_flash_read() failed");
-		goto out;
-	}
-
-	ret = env_import(buf, 1);
-	if (ret)
-		gd->env_valid = 1;
-out:
-	spi_flash_free(env_flash);
-	if (buf)
-		free(buf);
-	env_flash = NULL;
-}
-
-#else
-
-int saveenv(void)
-{
-	u32	saved_size, saved_offset, sector = 1;
-	char	*saved_buffer = NULL;
-	int	ret = 1;
-	env_t	env_new;
-
-	if (!env_flash) {
-		env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
-			CONFIG_ENV_SPI_CS,
-			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
-		if (!env_flash) {
-			set_default_env("!spi_flash_probe() failed");
-			return 1;
-		}
-	}
-
-	/* Is the sector larger than the env (i.e. embedded) */
-	if (CONFIG_ENV_SECT_SIZE > CONFIG_ENV_SIZE) {
-		saved_size = CONFIG_ENV_SECT_SIZE - CONFIG_ENV_SIZE;
-		saved_offset = CONFIG_ENV_OFFSET + CONFIG_ENV_SIZE;
-		saved_buffer = malloc(saved_size);
-		if (!saved_buffer)
-			goto done;
-
-		ret = spi_flash_read(env_flash, saved_offset,
-			saved_size, saved_buffer);
-		if (ret)
-			goto done;
-	}
-
-	if (CONFIG_ENV_SIZE > CONFIG_ENV_SECT_SIZE) {
-		sector = CONFIG_ENV_SIZE / CONFIG_ENV_SECT_SIZE;
-		if (CONFIG_ENV_SIZE % CONFIG_ENV_SECT_SIZE)
-			sector++;
-	}
-
-	ret = env_export(&env_new);
-	if (ret)
-		goto done;
-
-	puts("Erasing SPI flash...");
-	ret = spi_flash_erase(env_flash, CONFIG_ENV_OFFSET,
-		sector * CONFIG_ENV_SECT_SIZE);
-	if (ret)
-		goto done;
-
-	puts("Writing to SPI flash...");
-	ret = spi_flash_write(env_flash, CONFIG_ENV_OFFSET,
-		CONFIG_ENV_SIZE, &env_new);
-	if (ret)
-		goto done;
-
-	if (CONFIG_ENV_SECT_SIZE > CONFIG_ENV_SIZE) {
-		ret = spi_flash_write(env_flash, saved_offset,
-			saved_size, saved_buffer);
-		if (ret)
-			goto done;
-	}
-
-	ret = 0;
-	puts("done\n");
-
- done:
-	if (saved_buffer)
-		free(saved_buffer);
-
-	return ret;
-}
-
-void env_relocate_spec(void)
-{
-	int ret;
-	char *buf = NULL;
-
-	buf = (char *)malloc(CONFIG_ENV_SIZE);
-	env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS, CONFIG_ENV_SPI_CS,
-			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
-	if (!env_flash) {
-		set_default_env("!spi_flash_probe() failed");
-		if (buf)
-			free(buf);
-		return;
-	}
-
-	ret = spi_flash_read(env_flash,
-		CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE, buf);
-	if (ret) {
-		set_default_env("!spi_flash_read() failed");
-		goto out;
-	}
-
-	ret = env_import(buf, 1);
 	if (ret)
 		gd->env_valid = 1;
 out:

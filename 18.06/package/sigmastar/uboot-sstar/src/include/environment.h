@@ -21,6 +21,12 @@
  **************************************************************************
  */
 
+#if  defined(CONFIG_ENV_IS_IN_SPI_FLASH)
+#  ifdef CONFIG_ENV_OFFSET_REDUND
+#   define CONFIG_SYS_REDUNDAND_ENVIRONMENT
+#  endif
+#endif
+
 #if defined(CONFIG_ENV_IS_IN_FLASH)
 # ifndef	CONFIG_ENV_ADDR
 #  define	CONFIG_ENV_ADDR	(CONFIG_SYS_FLASH_BASE + CONFIG_ENV_OFFSET)

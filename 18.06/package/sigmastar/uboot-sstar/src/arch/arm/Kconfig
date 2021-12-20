@@ -887,17 +887,7 @@ source "arch/arm/cpu/armv7/chicago/Kconfig"
 
 source "arch/arm/cpu/armv7/infinity/Kconfig"
 
-source "arch/arm/cpu/armv7/infinity3/Kconfig"
-
-source "arch/arm/cpu/armv7/infinity5/Kconfig"
-
-source "arch/arm/cpu/armv7/infinity6/Kconfig"
-
 source "arch/arm/cpu/armv7/infinity2m/Kconfig"
-
-source "arch/arm/cpu/armv7/infinity6e/Kconfig"
-
-source "arch/arm/cpu/armv7/infinity6b0/Kconfig"
 
 source "arch/arm/cpu/armv7/Kconfig"
 

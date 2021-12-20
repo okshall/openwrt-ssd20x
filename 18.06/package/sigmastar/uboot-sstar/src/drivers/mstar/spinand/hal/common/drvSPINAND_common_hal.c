@@ -1175,7 +1175,7 @@ U32 HAL_SPINAND_Write(U32 u32_PageIdx, U8 *u8Data, U8 *pu8_SpareBuf)
 
     if(pSpiNandDrv->tSpinandInfo.u8PlaneCnt && (((u32_PageIdx / pSpiNandDrv->tSpinandInfo.u16_BlkPageCnt) & 0x1) == 1))
     {
-        u16ColumnAddr = (1<<12); // plane select for MICRON & 2GB
+        u16ColumnAddr |= (1<<12); // plane select for MICRON & 2GB
     }
 
     if(BDMA_W_FLAG && (pu8_SpareBuf == NULL) && (pSpiNandDrv->tSpinandInfo.u16_PageByteCnt <= 2048))

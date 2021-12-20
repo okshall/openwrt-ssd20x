@@ -72,17 +72,20 @@
 #define UNFD_PART_CUST2         0x32
 #define UNFD_PART_CUST3         0x33
 #define UNFD_PART_CUSTf         0x3F
+
+#define UNFD_PART_KEY_CUST      0x40
+
 #define UNFD_PART_END           0xC000
 #define UNFD_PART_UNKNOWN       0xF000
 
 
-#define CIS_DEFAULT_BACKUP 3
+#define CIS_DEFAULT_BACKUP 10
 #define CIS_MAX_BACKUP 5
-#define IPL_BACKUP 3
-#define IPL_CUST_BACKUP 3
+#define IPL_BACKUP 6
+#define IPL_CUST_BACKUP 6
 #define UBOOT_BACKUP 2
 #define SBOOT_MAXBLOCK 1
-#define UBOOT_MAXBLOCK 3
+#define UBOOT_MAXBLOCK 6
 
 
 

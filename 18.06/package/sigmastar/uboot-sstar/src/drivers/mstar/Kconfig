@@ -19,6 +19,10 @@ config MS_PARTITION
 config MS_SDMMC
     bool 'MSTAR SDMMC'
 
+config SDMMC_FAKE_CDZ
+    depends on MS_SDMMC
+    bool 'FAKE_CDZ'
+
 config MS_EMMC
     bool 'MSTAR eMMC'
 

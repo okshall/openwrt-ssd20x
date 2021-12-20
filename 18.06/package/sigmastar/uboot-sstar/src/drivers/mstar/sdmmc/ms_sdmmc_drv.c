@@ -666,8 +666,11 @@ BOOL_T SDMMC_CardDetect(U8_T u8Slot)
 	//IPEmType eIP = ge_IPSlot[u8Slot];
 
 	SDMMC_SwitchPAD(u8Slot);
-
+#ifdef CONFIG_SDMMC_FAKE_CDZ
+    return TRUE;
+#else
 	return Hal_CARD_GetGPIOState((GPIOEmType)u8Slot);
+#endif
 }
 
 

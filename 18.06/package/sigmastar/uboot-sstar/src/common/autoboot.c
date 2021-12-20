@@ -12,6 +12,23 @@
 #include <fdtdec.h>
 #include <menu.h>
 #include <post.h>
+#ifdef CONFIG_SSTAR_IR
+#include <ms_ir.h>
+#endif
+
+#if defined(CONFIG_MS_PARTITION)
+#include "part_mxp.h"
+#endif
+
+
+#if defined(CONFIG_CMD_MTDPARTS)
+#include <jffs2/jffs2.h>
+/* partition handling routines */
+int mtdparts_init(void);
+int find_dev_and_part(const char *id, struct mtd_device **dev,
+        u8 *part_num, struct part_info **part);
+#endif
+
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -277,7 +294,53 @@ const char *bootdelay_process(void)
 		s = getenv("altbootcmd");
 	} else
 #endif /* CONFIG_BOOTCOUNT_LIMIT */
-	s = getenv("bootcmd");
+        char* boot_cmd_line = getenv("bootcmd");
+        char* env = getenv("use_bak_rootfs");
+
+        if(!strcmp(env, "1") && (strstr(boot_cmd_line,"rootfs_bak") == NULL))//replace rootfs with rootfs_bak
+        {
+            char *str_start = strstr(boot_cmd_line, "rootfs");
+            if(str_start)
+            {
+                int num_start_bytes = str_start - boot_cmd_line;
+                int cmd_len = strlen(boot_cmd_line);
+                int str1_len = strlen("_bak");
+                int str2_len = strlen("rootfs");
+
+                char *tmp_buf = malloc(cmd_len + str1_len);
+                strncpy(tmp_buf, boot_cmd_line, num_start_bytes);
+                strcpy(tmp_buf + num_start_bytes, "rootfs_bak");
+                strncpy(tmp_buf + num_start_bytes + str1_len + str2_len, str_start + str2_len,cmd_len - num_start_bytes - str2_len);
+                tmp_buf[cmd_len + str1_len] = '\0';
+                setenv("bootcmd", tmp_buf);
+                saveenv();
+                s = tmp_buf;
+            }
+        }
+        else if(!strcmp(env, "0") && (strstr(boot_cmd_line,"rootfs_bak") != NULL)) //replace rootfs_bak with rootfs
+        {
+            char *str_start = strstr(boot_cmd_line, "rootfs_bak");
+            if(str_start)
+            {
+                int num_start_bytes = str_start - boot_cmd_line;
+                int cmd_len = strlen(boot_cmd_line);
+                int str1_len = strlen("_bak");
+                int str2_len = strlen("rootfs");
+                char *tmp_buf = malloc(cmd_len);
+
+                strncpy(tmp_buf, boot_cmd_line, num_start_bytes + str2_len);
+                strncpy(tmp_buf + num_start_bytes + strlen("rootfs"),str_start + str1_len + str2_len,cmd_len - num_start_bytes - str1_len - str2_len);
+
+                tmp_buf[cmd_len - str1_len] = '\0';
+                setenv("bootcmd", tmp_buf);
+                saveenv();
+                s = tmp_buf;
+            }
+        }
+        else
+        {
+            s = boot_cmd_line;
+        }
 
 	process_fdt_options(gd->fdt_blob);
 	stored_bootdelay = bootdelay;
@@ -285,8 +348,63 @@ const char *bootdelay_process(void)
 	return s;
 }
 
+int get_partition_size(char* strENVName)
+{
+        u32    size;
+#if defined(CONFIG_CMD_MTDPARTS) || defined(CONFIG_MS_SPINAND)
+
+        struct mtd_device *dev;
+        struct part_info *part;
+        u8 pnum;
+        int ret;
+
+        ret = mtdparts_init();
+        if (ret)
+            return ret;
+
+        ret = find_dev_and_part(strENVName, &dev, &pnum, &part);
+        if (ret)
+        {
+            debug("failed to get_partition_size with name: %s\n", strENVName);
+            return ret;
+        }
+
+        if (dev->id->type != MTD_DEV_TYPE_NAND)
+        {
+            puts("not a NAND device\n");
+            return -1;
+        }
+
+        size = part->size;
+#elif defined(CONFIG_MS_PARTITION)
+        u32 idx;
+
+        mxp_record rec;
+        mxp_load_table();
+        idx=mxp_get_record_index(strENVName);
+        if(idx<0)
+        {
+            debug("can not found mxp record: %s\n", strENVName);
+            return 0;
+        }
+
+        if(0 != mxp_get_record_by_index(idx,&rec))
+        {
+            debug("failed to get_partition_size with name: %s\n", strENVName);
+            return 0;
+        }
+        size = rec.size;
+#else
+        size = 0x00680000;
+#endif
+        return size;
+
+}
+
 void autoboot_command(const char *s)
 {
+    int size = 0;
+
 #if defined(CONFIG_MS_USB) || defined(CONFIG_MS_SDMMC) || defined(CONFIG_MS_EMMC)
     char *env;
 #endif

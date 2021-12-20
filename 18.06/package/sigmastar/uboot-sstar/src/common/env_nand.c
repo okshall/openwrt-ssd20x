@@ -28,7 +28,7 @@
     #ifdef CONFIG_MS_SPINAND
         #include "drvSPINAND.h"
         #include "spinand.h"
-        extern int MDrv_SPINAND_GetPartOffset(U16 u16_PartType, U32* u32_Offset);
+        extern int MDrv_SPINAND_GetPartOffset(U16 u16_PartType, U32* u32_Offset, U8 u8_backup);
     #endif
     #ifdef CONFIG_MS_NAND
         #include "drvNAND.h"
@@ -59,6 +59,9 @@ char *env_name_spec = "NAND";
 
 #if defined(CONFIG_MS_NAND) || defined(CONFIG_MS_SPINAND)
 U32 ms_nand_env_offset = 0;
+#ifdef CONFIG_ENV_OFFSET_REDUND
+U32 ms_nand_env_redund_offset = 0;
+#endif
 #endif
 
 #if defined(ENV_IS_EMBEDDED)
@@ -221,7 +224,7 @@ int saveenv(void)
 #ifndef	CONFIG_MSTAR_ENV_NAND_OFFSET
 			.erase_opts = {
 				.length = CONFIG_ENV_RANGE,
-				.offset = CONFIG_MSTAR_ENV_NAND_OFFSET,
+				.offset = CONFIG_ENV_OFFSET,
 
 			},
 #endif
@@ -229,31 +232,44 @@ int saveenv(void)
 #ifdef CONFIG_ENV_OFFSET_REDUND
 		{
 			.name = "redundant NAND",
+#ifndef	CONFIG_MSTAR_ENV_NAND_REDUND_OFFSET
 			.erase_opts = {
 				.length = CONFIG_ENV_RANGE,
 				.offset = CONFIG_ENV_OFFSET_REDUND,
 			},
+#endif
 		},
 #endif
 	};
 
 #ifdef CONFIG_MSTAR_ENV_NAND_OFFSET
-//	if(ms_nand_env_offset == 0)
-//	{
-        #ifdef CONFIG_MS_SPINAND
-            if(MDrv_SPINAND_GetPartOffset(UNFD_PART_ENV, &ms_nand_env_offset) != 0)
-        #endif
-        #ifdef CONFIG_MS_NAND
-            if(drvNAND_GetPartOffset(UNFD_PART_ENV,&ms_nand_env_offset)!=UNFD_ST_SUCCESS)
-        #endif
-            {
-                printf("ERROR!! get NAND CONFIG_ENV_OFFSET failed!!\n");
-                ms_nand_env_offset = 0;
-                return -1;
-            }
-//	}
-	location[0].erase_opts.length=CONFIG_ENV_RANGE;
-	location[0].erase_opts.offset=CONFIG_MSTAR_ENV_NAND_OFFSET;
+#ifdef CONFIG_MS_SPINAND
+    if(MDrv_SPINAND_GetPartOffset(UNFD_PART_ENV, &ms_nand_env_offset, 0) != 0)
+#endif
+#ifdef CONFIG_MS_NAND
+    if(drvNAND_GetPartOffset(UNFD_PART_ENV,&ms_nand_env_offset)!=UNFD_ST_SUCCESS)
+#endif
+    {
+        printf("ERROR!! get NAND CONFIG_ENV_OFFSET failed!!\n");
+        ms_nand_env_offset = 0;
+        return -1;
+    }
+    memset(&location[0].erase_opts, 0 ,sizeof(struct nand_erase_options));
+    location[0].erase_opts.length=CONFIG_ENV_RANGE;
+    location[0].erase_opts.offset=CONFIG_MSTAR_ENV_NAND_OFFSET;
+#endif
+#ifdef CONFIG_MSTAR_ENV_NAND_REDUND_OFFSET
+#ifdef CONFIG_MS_SPINAND
+    if(MDrv_SPINAND_GetPartOffset(UNFD_PART_ENV, &ms_nand_env_redund_offset, 1) != 0)
+    {
+        printf("ERROR!! get NAND CONFIG_ENV_REDUND_OFFSET failed!!\n");
+        ms_nand_env_redund_offset = 0;
+        return -1;
+    }
+#endif
+    memset(&location[1].erase_opts, 0 ,sizeof(struct nand_erase_options));
+    location[1].erase_opts.length=CONFIG_ENV_RANGE;
+    location[1].erase_opts.offset=CONFIG_MSTAR_ENV_NAND_REDUND_OFFSET;
 #endif
 
 	if (CONFIG_ENV_RANGE < CONFIG_ENV_SIZE)
@@ -361,7 +377,11 @@ int get_nand_env_oob(nand_info_t *nand, unsigned long *result)
 #endif
 
 #ifdef CONFIG_ENV_OFFSET_REDUND
+#if (defined(CONFIG_MS_NAND) && defined(CONFIG_MS_EMMC) && defined(CONFIG_MS_SPINAND))
+void nand_env_relocate_spec(void)
+#else
 void env_relocate_spec(void)
+#endif
 {
 #if !defined(ENV_IS_EMBEDDED)
 	int read1_fail = 0, read2_fail = 0;
@@ -375,6 +395,33 @@ void env_relocate_spec(void)
 		set_default_env("!malloc() failed");
 		goto done;
 	}
+
+#ifdef CONFIG_MSTAR_ENV_NAND_OFFSET
+#ifdef CONFIG_MS_SPINAND
+    if(MDrv_SPINAND_GetPartOffset(UNFD_PART_ENV, &ms_nand_env_offset, 0) != 0)
+    {
+        printf("ERROR!! get NAND CONFIG_ENV_OFFSET failed!!\n");
+        ms_nand_env_offset = 0;
+        return -1;
+    }
+#ifdef CONFIG_MSTAR_ENV_NAND_REDUND_OFFSET
+    if(MDrv_SPINAND_GetPartOffset(UNFD_PART_ENV, &ms_nand_env_redund_offset, 1) != 0)
+    {
+        printf("ERROR!! get NAND CONFIG_ENV_REDUND_OFFSET failed!!\n");
+        ms_nand_env_redund_offset = 0;
+        return -1;
+    }
+#endif
+#endif
+#ifdef CONFIG_MS_NAND
+    if(drvNAND_GetPartOffset(UNFD_PART_ENV,&ms_nand_env_offset)!=UNFD_ST_SUCCESS)
+    {
+        printf("ERROR!! get NAND CONFIG_ENV_OFFSET failed!!\n");
+        ms_nand_env_offset = 0;
+        return -1;
+    }
+#endif
+#endif
 
 	read1_fail = readenv(CONFIG_ENV_OFFSET, (u_char *) tmp_env1);
 	read2_fail = readenv(CONFIG_ENV_OFFSET_REDUND, (u_char *) tmp_env2);
@@ -458,7 +505,7 @@ void env_relocate_spec(void)
 #endif
 
 #ifdef CONFIG_MS_SPINAND
-    if(MDrv_SPINAND_GetPartOffset(UNFD_PART_ENV, &ms_nand_env_offset) != 0)
+    if(MDrv_SPINAND_GetPartOffset(UNFD_PART_ENV, &ms_nand_env_offset, 0) != 0)
 #endif
 #ifdef CONFIG_MS_NAND
 	if(drvNAND_GetPartOffset(UNFD_PART_ENV,&ms_nand_env_offset)!=UNFD_ST_SUCCESS)

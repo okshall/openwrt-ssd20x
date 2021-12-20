@@ -282,6 +282,11 @@ MDrv_SPINAND_Init_Detect_ID:
 #endif
     }
 
+    if(tSpinandInfo->au8_ID[0] == 0x2c && tSpinandInfo->au8_ID[1] == 0x24)//two plane
+    {
+        tSpinandInfo->u8PlaneCnt = 2;
+    }
+
     return TRUE;
 }
 /*void MDrv_SPINAND_ForceInit(SPINAND_FLASH_INFO_t *tSpinandInfo)
@@ -326,7 +331,7 @@ U32 MDrv_SPINAND_Read(U32 u32_PageIdx, U8 *u8Data, U8 *pu8_SpareBuf)
 
     if(pSpiNandDrv->tSpinandInfo.u8PlaneCnt && (((u32_PageIdx/pSpiNandDrv->tSpinandInfo.u16_BlkPageCnt)&0x1) == 1))
     {
-        u16ColumnAddr = (1<<12); // plane select for MICRON & 2GB
+        u16ColumnAddr |= (1<<12); // plane select for MICRON & 2GB
         spi_nand_msg("PLANE: u16ColumnAddr %x\n", u16ColumnAddr);
     }
 
@@ -353,8 +358,9 @@ U32 MDrv_SPINAND_Read(U32 u32_PageIdx, U8 *u8Data, U8 *pu8_SpareBuf)
         if(u8Status == ECC_4_6_CORRECTED)
            u32Ret = ERR_SPINAND_ECC_4_6_CORRECTED;
         if(u8Status == ECC_7_8_CORRECTED)
-            u32Ret = ERR_SPINAND_ECC_7_8_CORRECTED;        
-        if(u8Status == ECC_NOT_CORRECTED){
+            u32Ret = ERR_SPINAND_ECC_7_8_CORRECTED;
+        if(u8Status == ECC_NOT_CORRECTED)
+        {
             u32Ret = ERR_SPINAND_ECC_ERROR;
             printf("ecc error P: 0x%x\r\n", u32_PageIdx);
         }

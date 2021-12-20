@@ -101,7 +101,11 @@ static uint _TransArrToUInt(U8_T u8Sep1, U8_T u8Sep2, U8_T u8Sep3, U8_T u8Sep4)
 //------------------------------------------------------------------------------------------------
 static U8_T _CardDetect(SlotEmType eSlot)
 {
+#ifdef CONFIG_SDMMC_FAKE_CDZ
+    return TRUE;
+#else
     return Hal_CARD_GetGPIOState((GPIOEmType)eSlot);
+#endif
 }
 
 

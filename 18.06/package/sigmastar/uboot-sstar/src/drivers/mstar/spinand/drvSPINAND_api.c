@@ -333,18 +333,21 @@ static int _MDrv_SPINAND_GetMtdPartsFromPNI(char *buf)
             case UNFD_PART_ROOTFS_BAK:
                 sprintf(PartName,"rootfs_bak" );
                 break;
-			default:
-			    if(nPartTypeNoFlag >= UNFD_PART_CUST0 &&
-			       nPartTypeNoFlag <= UNFD_PART_CUSTf)
-			    {
-			        sprintf(PartName,"CUST%d", nPartTypeNoFlag - UNFD_PART_CUST0);
-			    }
-			    else
-			    {
-			        sprintf(PartName,"UNKNOWN%d",u8_i );
-			    }
-				break;
-		}
+            case UNFD_PART_KEY_CUST:
+                sprintf(PartName,"KEY_CUST" );
+                break;
+            default:
+                if(nPartTypeNoFlag >= UNFD_PART_CUST0 &&
+                   nPartTypeNoFlag <= UNFD_PART_CUSTf)
+                {
+                    sprintf(PartName,"CUST%d", nPartTypeNoFlag - UNFD_PART_CUST0);
+                }
+                else
+                {
+                    sprintf(PartName,"UNKNOWN%d",u8_i );
+                }
+                break;
+        }
         bFound = TRUE;
         if (bFirst)
         {
@@ -523,7 +526,7 @@ PARTITION_RECORD_t *MDrv_SPINAND_SearchPartition(PARTITION_RECORD_t *pRecord,
     return (void*)0;
 }
 
-int MDrv_SPINAND_GetPartOffset(U16 u16_PartType, U32* u32_Offset)
+int MDrv_SPINAND_GetPartOffset(U16 u16_PartType, U32* u32_Offset, U8 u8_backup)
 {
     SPI_NAND_DRIVER_t *pSpiNandDrv = (SPI_NAND_DRIVER_t*)drvSPINAND_get_DrvContext_address();
     u16 ENVPBA = 0;
@@ -532,6 +535,10 @@ int MDrv_SPINAND_GetPartOffset(U16 u16_PartType, U32* u32_Offset)
     if (0 != (pSpiNandDrv->tSpinandInfo.u8_UBOOTPBA))
     {
         ENVPBA = ((CIS_DEFAULT_BACKUP + IPL_BACKUP + IPL_CUST_BACKUP) * SBOOT_MAXBLOCK)+(UBOOT_BACKUP * UBOOT_MAXBLOCK);
+        if(u8_backup)
+        {
+            ENVPBA += 2;
+        }
         *u32_Offset = ENVPBA * blockSize;
         return 0;
     }
@@ -546,12 +553,20 @@ int MDrv_SPINAND_GetPartOffset(U16 u16_PartType, U32* u32_Offset)
             *u32_Offset = 0;
             return -1;
         }
+        if(u8_backup)
+        {
+            pRecord ++;
+        }
         *u32_Offset = pRecord->u16_StartBlk * pSpiNandDrv->tSpinandInfo.u16_BlkPageCnt * pSpiNandDrv->tSpinandInfo.u16_PageByteCnt;
         return 0;
     }
     else
     {
         ENVPBA = ((CIS_DEFAULT_BACKUP + IPL_BACKUP + IPL_CUST_BACKUP) * SBOOT_MAXBLOCK)+(UBOOT_BACKUP * UBOOT_MAXBLOCK);
+        if(u8_backup)
+        {
+            ENVPBA += 2;
+        }
         *u32_Offset = ENVPBA * blockSize;
         spi_nand_err("UBOOT_PBA==0 and no PNI: %d %d %d", pSpiNandDrv->tSpinandInfo.u8_BL0PBA, pSpiNandDrv->tSpinandInfo.u8_BL1PBA, pSpiNandDrv->tSpinandInfo.u8_UBOOTPBA);
         spi_nand_err("use offset %X", *u32_Offset);

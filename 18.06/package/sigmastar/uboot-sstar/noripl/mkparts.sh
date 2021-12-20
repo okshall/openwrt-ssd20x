@@ -1,0 +1,2 @@
+./mxpgenerator "0x10000(IPL),0x10000(IPL_CUST),0x10000(MXPT),0x3E000(UBOOT),0x2000(UBOOT_ENV)" "0x290000(KERNEL),0xcf0000(rootfs),0x10000(factorydata)" ./MXP_SF.bin
+
